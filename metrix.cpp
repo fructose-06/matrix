@@ -34,7 +34,20 @@ vector<vector<double>> multiplyMatrix(const vector<vector<double>>& A, const vec
     return C;
 }
 
-// FIXED: Function to find linearly independent eigenvectors using Gaussian Elimination & Back-substitution
+// Function to check if a matrix is truly diagonal
+bool isDiagonal(const vector<vector<double>>& M) {
+    int n = M.size();
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            if (i != j && abs(M[i][j]) > EPSILON) {
+                return false; 
+            }
+        }
+    }
+    return true;
+}
+
+// Function to find linearly independent eigenvectors using Gaussian Elimination & Back-substitution
 vector<vector<double>> solveNullSpace(vector<vector<double>> M) {
     int n = M.size();
     
@@ -66,14 +79,14 @@ vector<vector<double>> solveNullSpace(vector<vector<double>> M) {
     }
 
     vector<vector<double>> basis;
-    if (free_count == 0) return basis; // Only trivial solution exists
+    if (free_count == 0) return basis; 
 
     // Step 3: Back-substitution for each Free Variable to build basis vectors
     for (int f = 0; f < n; f++) {
         if (!is_free[f]) continue;
 
         vector<double> vec(n, 0.0);
-        vec[f] = 1.0; // Set this free variable to 1.0
+        vec[f] = 1.0; 
 
         for (int i = n - 1; i >= 0; i--) {
             if (is_free[i]) continue;
@@ -128,10 +141,16 @@ void solve2x2(vector<vector<double>> A) {
     cout << "\n1. Eigenvalues:\nL1 = " << L1 << ", L2 = " << L2 << "\n";
 
     vector<vector<double>> P_cols;
-    for (double L : {L1, L2}) {
-        vector<vector<double>> M = {{a - L, b}, {c, d - L}};
-        auto vecs = solveNullSpace(M);
-        for (auto& v : vecs) P_cols.push_back(v);
+    // FIXED: If eigenvalues are identical, solve null space once to get all independent vectors
+    if (abs(L1 - L2) < 1e-3) {
+        vector<vector<double>> M = {{a - L1, b}, {c, d - L1}};
+        P_cols = solveNullSpace(M);
+    } else {
+        for (double L : {L1, L2}) {
+            vector<vector<double>> M = {{a - L, b}, {c, d - L}};
+            auto vecs = solveNullSpace(M);
+            for (auto& v : vecs) P_cols.push_back(v);
+        }
     }
 
     if (P_cols.size() < 2) {
@@ -149,25 +168,32 @@ void solve2x2(vector<vector<double>> A) {
         return;
     }
 
-    cout << "\n2. Eigenvectors:\n";
-    cout << "v1 = [" << P[0][0] << ", " << P[1][0] << "]\n";
-    cout << "v2 = [" << P[0][1] << ", " << P[1][1] << "]\n";
-    cout << "\n3. Diagonalization Check: Can be diagonalized\n";
-
     vector<vector<double>> P_inv = {
         {P[1][1] / detP, -P[0][1] / detP},
         {-P[1][0] / detP, P[0][0] / detP}
     };
 
+    // FIXED: Strict Final Mathematical Validation
+    vector<vector<double>> D = multiplyMatrix(multiplyMatrix(P_inv, A), P);
+    if (!isDiagonal(D)) {
+        cout << "\n3. Diagonalization Check: Cannot be diagonalized\n";
+        cout << "Reason: Matrix D is not truly diagonal (Deficient eigenvectors detected via validation)\n";
+        return;
+    }
+
+    cout << "\n2. Eigenvectors:\n";
+    cout << "v1 = [" << P[0][0] << ", " << P[1][0] << "]\n";
+    cout << "v2 = [" << P[0][1] << ", " << P[1][1] << "]\n";
+    cout << "\n3. Diagonalization Check: Can be diagonalized\n";
+
     cout << "\n4. Matrices P and P^-1:";
     printMatrix("Matrix P", P);
     printMatrix("Matrix P^-1", P_inv);
-    printMatrix("Diagonal Matrix D (P^-1 * A * P)", multiplyMatrix(multiplyMatrix(P_inv, A), P));
+    printMatrix("Diagonal Matrix D (P^-1 * A * P)", D);
 }
 
 // Solver for 3x3 matrices
 void solve3x3(vector<vector<double>> A) {
-    // Computing characteristic equation coefficients: L^3 + c2*L^2 + c1*L + c0 = 0
     double c2 = -(A[0][0] + A[1][1] + A[2][2]);
     double c1 = (A[0][0]*A[1][1] - A[0][1]*A[1][0]) + 
                 (A[0][0]*A[2][2] - A[0][2]*A[2][0]) + 
@@ -176,7 +202,6 @@ void solve3x3(vector<vector<double>> A) {
                   A[0][1]*(A[1][0]*A[2][2] - A[1][2]*A[2][0]) + 
                   A[0][2]*(A[1][0]*A[2][1] - A[1][1]*A[2][0]));
 
-    // Cardano's Formula components for Cubic Equation
     double Q = (3 * c1 - c2 * c2) / 9.0;
     double R = (9 * c2 * c1 - 27 * c0 - 2 * c2 * c2 * c2) / 54.0;
     double D_val = Q * Q * Q + R * R;
@@ -193,7 +218,6 @@ void solve3x3(vector<vector<double>> A) {
         raw_eigenvalues.push_back(2 * sqrt(-Q) * cos((theta + 4 * PI) / 3.0) - c2 / 3.0);
     }
 
-    // Safely group up duplicated eigenvalues to prevent floating precision mismatches
     vector<pair<double, int>> unique_eigenvalues;
     for (double ev : raw_eigenvalues) {
         bool found = false;
@@ -221,7 +245,6 @@ void solve3x3(vector<vector<double>> A) {
         for (auto& v : vecs) P_cols.push_back(v);
     }
 
-    // Verify if we have collected enough eigenvectors to form a full basis
     if (P_cols.size() < 3) {
         cout << "\n3. Diagonalization Check: Cannot be diagonalized\n";
         cout << "Reason: Geometric multiplicity is less than algebraic multiplicity (not enough unique eigenvectors)\n";
@@ -229,13 +252,10 @@ void solve3x3(vector<vector<double>> A) {
     }
 
     vector<vector<double>> P(3, vector<double>(3));
-    cout << "\n2. Eigenvectors:\n";
     for (int i = 0; i < 3; i++) {
-        cout << "v" << i+1 << " = [" << P_cols[i][0] << ", " << P_cols[i][1] << ", " << P_cols[i][2] << "]\n";
         P[0][i] = P_cols[i][0]; P[1][i] = P_cols[i][1]; P[2][i] = P_cols[i][2];
     }
 
-    // Compute determinant of matrix P
     double detP = P[0][0]*(P[1][1]*P[2][2] - P[1][2]*P[2][1]) - 
                   P[0][1]*(P[1][0]*P[2][2] - P[1][2]*P[2][0]) + 
                   P[0][2]*(P[1][0]*P[2][1] - P[1][1]*P[2][0]);
@@ -246,9 +266,6 @@ void solve3x3(vector<vector<double>> A) {
         return;
     }
 
-    cout << "\n3. Diagonalization Check: Can be diagonalized\n";
-
-    // Analytical calculation of inverse matrix P^-1
     vector<vector<double>> P_inv(3, vector<double>(3));
     P_inv[0][0] = (P[1][1]*P[2][2] - P[1][2]*P[2][1]) / detP;
     P_inv[0][1] = (P[0][2]*P[2][1] - P[0][1]*P[2][2]) / detP;
@@ -260,10 +277,24 @@ void solve3x3(vector<vector<double>> A) {
     P_inv[2][1] = (P[0][1]*P[2][0] - P[0][0]*P[2][1]) / detP;
     P_inv[2][2] = (P[0][0]*P[1][1] - P[0][1]*P[1][0]) / detP;
 
+    // FIXED: Strict Final Mathematical Validation
+    vector<vector<double>> D = multiplyMatrix(multiplyMatrix(P_inv, A), P);
+    if (!isDiagonal(D)) {
+        cout << "\n3. Diagonalization Check: Cannot be diagonalized\n";
+        cout << "Reason: Matrix D is not truly diagonal (Deficient eigenvectors detected via validation)\n";
+        return;
+    }
+
+    cout << "\n2. Eigenvectors:\n";
+    for (int i = 0; i < 3; i++) {
+        cout << "v" << i+1 << " = [" << P_cols[i][0] << ", " << P_cols[i][1] << ", " << P_cols[i][2] << "]\n";
+    }
+    cout << "\n3. Diagonalization Check: Can be diagonalized\n";
+
     cout << "\n4. Matrices P and P^-1:";
     printMatrix("Matrix P", P);
     printMatrix("Matrix P^-1", P_inv);
-    printMatrix("Diagonal Matrix D (P^-1 * A * P)", multiplyMatrix(multiplyMatrix(P_inv, A), P));
+    printMatrix("Diagonal Matrix D (P^-1 * A * P)", D);
 }
 
 int main() {
